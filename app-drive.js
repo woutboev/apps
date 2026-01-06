@@ -1,8 +1,7 @@
-// Google API Configuration
-// BELANGRIJK: Vervang dit met je eigen Client ID van Google Cloud Console
-const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-const DRIVE_FILENAME = 'overleggen-data.json';
+// Google Drive Configuration
+const GOOGLE_CLIENT_ID = '496253904370-0fktgc00rn6ch2sgp2jep4o5bpius311.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+const DRIVE_FILE_NAME = 'overleggen-data.json';
 
 // Data Model
 class OverlegApp {
@@ -10,16 +9,15 @@ class OverlegApp {
         this.overleggen = [];
         this.currentOverleg = null;
         this.editingOverleg = null;
-        this.isSignedIn = false;
+        this.user = null;
         this.accessToken = null;
         this.driveFileId = null;
         this.isSyncing = false;
         this.init();
     }
 
-    async init() {
-        // Check if we need to show login or main app
-        this.checkAuthState();
+    init() {
+        this.setupGoogleSignIn();
         this.setupEventListeners();
         this.requestNotificationPermission();
         
@@ -31,254 +29,227 @@ class OverlegApp {
         }
     }
 
-    checkAuthState() {
-        // Check if there's a stored access token
-        const storedToken = localStorage.getItem('google_access_token');
-        if (storedToken) {
-            this.accessToken = storedToken;
-            this.isSignedIn = true;
+    // Google Sign-In
+    setupGoogleSignIn() {
+        google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: this.handleCredentialResponse.bind(this)
+        });
+
+        google.accounts.id.renderButton(
+            document.getElementById('googleSignInButton'),
+            { 
+                theme: 'outline', 
+                size: 'large',
+                text: 'signin_with',
+                locale: 'nl'
+            }
+        );
+
+        // Check if already logged in
+        const savedUser = localStorage.getItem('user');
+        const savedToken = localStorage.getItem('accessToken');
+        if (savedUser && savedToken) {
+            this.user = JSON.parse(savedUser);
+            this.accessToken = savedToken;
             this.showMainApp();
-            this.loadFromDrive();
-        } else {
-            this.showLoginScreen();
         }
     }
 
-    showLoginScreen() {
-        document.getElementById('loginScreen').style.display = 'flex';
-        document.getElementById('mainApp').style.display = 'none';
-        this.initializeGoogleSignIn();
+    async handleCredentialResponse(response) {
+        try {
+            // Decode JWT token
+            const payload = this.parseJwt(response.credential);
+            
+            this.user = {
+                name: payload.name,
+                email: payload.email,
+                picture: payload.picture
+            };
+
+            // Request access token
+            const tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: SCOPES,
+                callback: async (tokenResponse) => {
+                    if (tokenResponse.access_token) {
+                        this.accessToken = tokenResponse.access_token;
+                        localStorage.setItem('user', JSON.stringify(this.user));
+                        localStorage.setItem('accessToken', this.accessToken);
+                        
+                        await this.loadFromDrive();
+                        this.showMainApp();
+                    }
+                }
+            });
+
+            tokenClient.requestAccessToken();
+        } catch (error) {
+            console.error('Login error:', error);
+            alert('Er ging iets mis bij het inloggen. Probeer het opnieuw.');
+        }
+    }
+
+    parseJwt(token) {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
     }
 
     showMainApp() {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
+        
+        // Set profile image
+        document.getElementById('profileImage').src = this.user.picture;
+        document.getElementById('profileImageLarge').src = this.user.picture;
+        document.getElementById('profileName').textContent = this.user.name;
+        document.getElementById('profileEmail').textContent = this.user.email;
+        
         this.render();
+        this.checkAndScheduleNotifications();
     }
 
-    initializeGoogleSignIn() {
-        if (GOOGLE_CLIENT_ID === 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com') {
-            // Show error message if client ID not configured
-            const button = document.getElementById('signInButton');
-            button.innerHTML = `
-                <div style="background: #FFE5E5; color: #D32F2F; padding: 16px; border-radius: 10px; text-align: left;">
-                    <strong>⚠️ Configuratie vereist</strong><br>
-                    <small>De app moet eerst geconfigureerd worden met een Google Client ID. 
-                    Zie de README voor instructies.</small>
-                </div>
-            `;
-            return;
-        }
-
-        google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: this.handleCredentialResponse.bind(this),
-            auto_select: false
-        });
-
-        google.accounts.id.renderButton(
-            document.getElementById('signInButton'),
-            { 
-                theme: 'outline', 
-                size: 'large',
-                text: 'continue_with',
-                width: 280
-            }
-        );
-    }
-
-    async handleCredentialResponse(response) {
-        try {
-            // Decode JWT to get user info
-            const payload = JSON.parse(atob(response.credential.split('.')[1]));
-            
-            // Store user info
-            localStorage.setItem('user_name', payload.name);
-            localStorage.setItem('user_email', payload.email);
-            localStorage.setItem('user_picture', payload.picture);
-            
-            // Get access token for Drive API
-            await this.getAccessToken(response.credential);
-            
-            this.isSignedIn = true;
-            this.showMainApp();
-            await this.loadFromDrive();
-            
-        } catch (error) {
-            console.error('Sign-in error:', error);
-            alert('Inloggen mislukt. Probeer het opnieuw.');
+    logout() {
+        if (confirm('Weet je zeker dat je wilt uitloggen?')) {
+            localStorage.removeItem('user');
+            localStorage.removeItem('accessToken');
+            google.accounts.id.disableAutoSelect();
+            location.reload();
         }
     }
 
-    async getAccessToken(credential) {
-        // For Drive API access, we need to use OAuth 2.0 flow
-        // This is a simplified approach - in production, use proper OAuth flow
-        const tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: GOOGLE_CLIENT_ID,
-            scope: SCOPES,
-            callback: (response) => {
-                if (response.access_token) {
-                    this.accessToken = response.access_token;
-                    localStorage.setItem('google_access_token', response.access_token);
-                    // Token expires, so we store timestamp
-                    localStorage.setItem('token_timestamp', Date.now().toString());
-                }
-            },
-        });
-        
-        return new Promise((resolve) => {
-            tokenClient.callback = async (response) => {
-                if (response.error) {
-                    console.error('Token error:', response);
-                    resolve(false);
-                }
-                this.accessToken = response.access_token;
-                localStorage.setItem('google_access_token', response.access_token);
-                localStorage.setItem('token_timestamp', Date.now().toString());
-                resolve(true);
-            };
-            tokenClient.requestAccessToken();
-        });
-    }
-
+    // Google Drive Integration
     async loadFromDrive() {
-        if (!this.accessToken) return;
-        
-        this.showSyncStatus('Laden van Drive...', 'syncing');
-        
         try {
-            // Search for our data file
-            const fileId = await this.findDriveFile();
+            this.showSyncStatus('Laden...', 'syncing');
             
-            if (fileId) {
-                this.driveFileId = fileId;
-                // Download file content
-                const content = await this.downloadDriveFile(fileId);
-                if (content) {
-                    this.overleggen = JSON.parse(content);
-                    // Convert date strings back to Date objects
-                    this.overleggen.forEach(o => {
-                        if (o.datum) o.datum = new Date(o.datum);
-                    });
-                    this.render();
-                    this.checkAndScheduleNotifications();
-                    this.showSyncStatus('Gesynchroniseerd', 'success');
+            // Search for existing file
+            const searchResponse = await fetch(
+                `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${DRIVE_FILE_NAME}'`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${this.accessToken}`
+                    }
                 }
+            );
+
+            const searchData = await searchResponse.json();
+            
+            if (searchData.files && searchData.files.length > 0) {
+                // File exists, load it
+                this.driveFileId = searchData.files[0].id;
+                
+                const fileResponse = await fetch(
+                    `https://www.googleapis.com/drive/v3/files/${this.driveFileId}?alt=media`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${this.accessToken}`
+                        }
+                    }
+                );
+
+                const data = await fileResponse.json();
+                this.overleggen = data.overleggen || [];
+                
+                // Convert date strings back to Date objects
+                this.overleggen.forEach(o => {
+                    if (o.datum) o.datum = new Date(o.datum);
+                });
+                
+                this.updateLastSyncTime();
+                this.showSyncStatus('Geladen', 'success');
             } else {
-                // No file exists yet, create it
-                await this.saveToDrive();
+                // No file exists yet
+                this.overleggen = [];
+                this.showSyncStatus('Geen data gevonden', 'success');
             }
+            
+            setTimeout(() => this.hideSyncStatus(), 2000);
         } catch (error) {
-            console.error('Load error:', error);
-            this.showSyncStatus('Sync mislukt', 'error');
-            // Fall back to local storage
+            console.error('Error loading from Drive:', error);
+            this.showSyncStatus('Fout bij laden', 'error');
+            setTimeout(() => this.hideSyncStatus(), 3000);
+            
+            // Fallback to local storage
             this.loadFromLocalStorage();
         }
-        
-        setTimeout(() => this.hideSyncStatus(), 2000);
-    }
-
-    async findDriveFile() {
-        const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_FILENAME}' and trashed=false`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${this.accessToken}`
-                }
-            }
-        );
-        
-        const data = await response.json();
-        return data.files && data.files.length > 0 ? data.files[0].id : null;
-    }
-
-    async downloadDriveFile(fileId) {
-        const response = await fetch(
-            `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${this.accessToken}`
-                }
-            }
-        );
-        
-        if (response.ok) {
-            return await response.text();
-        }
-        return null;
     }
 
     async saveToDrive() {
-        if (!this.accessToken || this.isSyncing) return;
-        
-        this.isSyncing = true;
-        this.showSyncStatus('Opslaan naar Drive...', 'syncing');
+        if (this.isSyncing) return;
         
         try {
-            const content = JSON.stringify(this.overleggen);
-            const blob = new Blob([content], { type: 'application/json' });
+            this.isSyncing = true;
+            this.showSyncStatus('Synchroniseren...', 'syncing');
+            document.getElementById('syncBtn').classList.add('syncing');
             
-            if (this.driveFileId) {
-                // Update existing file
-                await this.updateDriveFile(this.driveFileId, blob);
-            } else {
-                // Create new file
-                const fileId = await this.createDriveFile(blob);
-                this.driveFileId = fileId;
-            }
-            
-            this.showSyncStatus('Opgeslagen', 'success');
-        } catch (error) {
-            console.error('Save error:', error);
-            this.showSyncStatus('Opslaan mislukt', 'error');
-            // Fall back to local storage
-            this.saveToLocalStorage();
-        }
-        
-        this.isSyncing = false;
-        setTimeout(() => this.hideSyncStatus(), 2000);
-    }
+            const data = {
+                overleggen: this.overleggen,
+                lastModified: new Date().toISOString()
+            };
 
-    async createDriveFile(blob) {
-        const metadata = {
-            name: DRIVE_FILENAME,
-            mimeType: 'application/json'
-        };
-        
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', blob);
-        
-        const response = await fetch(
-            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-            {
-                method: 'POST',
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const metadata = {
+                name: DRIVE_FILE_NAME,
+                mimeType: 'application/json',
+                parents: ['appDataFolder']
+            };
+
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            form.append('file', blob);
+
+            const url = this.driveFileId
+                ? `https://www.googleapis.com/upload/drive/v3/files/${this.driveFileId}?uploadType=multipart`
+                : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+
+            const method = this.driveFileId ? 'PATCH' : 'POST';
+
+            const response = await fetch(url, {
+                method: method,
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`
                 },
                 body: form
+            });
+
+            const result = await response.json();
+            
+            if (!this.driveFileId) {
+                this.driveFileId = result.id;
             }
-        );
-        
-        const data = await response.json();
-        return data.id;
+
+            this.updateLastSyncTime();
+            this.showSyncStatus('Gesynchroniseerd', 'success');
+            
+            // Also save locally as backup
+            this.saveToLocalStorage();
+            
+            setTimeout(() => this.hideSyncStatus(), 2000);
+        } catch (error) {
+            console.error('Error saving to Drive:', error);
+            this.showSyncStatus('Sync mislukt', 'error');
+            
+            // Save locally as fallback
+            this.saveToLocalStorage();
+            
+            setTimeout(() => this.hideSyncStatus(), 3000);
+        } finally {
+            this.isSyncing = false;
+            document.getElementById('syncBtn').classList.remove('syncing');
+        }
     }
 
-    async updateDriveFile(fileId, blob) {
-        await fetch(
-            `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
-            {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${this.accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: blob
-            }
-        );
+    async manualSync() {
+        await this.loadFromDrive();
+        this.render();
     }
 
-    // Fallback methods
+    // Local Storage Fallback
     loadFromLocalStorage() {
         const saved = localStorage.getItem('overleggen');
         if (saved) {
@@ -287,55 +258,52 @@ class OverlegApp {
                 if (o.datum) o.datum = new Date(o.datum);
             });
         }
-        this.render();
-        this.checkAndScheduleNotifications();
     }
 
     saveToLocalStorage() {
         localStorage.setItem('overleggen', JSON.stringify(this.overleggen));
     }
 
-    showSyncStatus(text, status) {
-        const syncStatus = document.getElementById('syncStatus');
-        const syncStatusText = document.getElementById('syncStatusText');
-        syncStatusText.textContent = text;
-        syncStatus.className = `sync-status ${status}`;
-        syncStatus.style.display = 'flex';
-        
-        const syncBtn = document.getElementById('syncBtn');
-        if (status === 'syncing') {
-            syncBtn.classList.add('syncing');
-        } else {
-            syncBtn.classList.remove('syncing');
-        }
+    // Sync Status UI
+    showSyncStatus(message, type) {
+        const status = document.getElementById('syncStatus');
+        status.textContent = message;
+        status.className = `sync-status show ${type}`;
     }
 
     hideSyncStatus() {
-        document.getElementById('syncStatus').style.display = 'none';
+        const status = document.getElementById('syncStatus');
+        status.classList.remove('show');
+    }
+
+    updateLastSyncTime() {
+        const now = new Date();
+        const time = now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+        document.getElementById('lastSyncTime').textContent = time;
     }
 
     // Data Management
-    async addOverleg(overleg) {
+    addOverleg(overleg) {
         overleg.id = this.generateId();
         this.overleggen.push(overleg);
-        await this.saveToDrive();
+        this.saveToDrive();
         this.render();
         this.scheduleNotification(overleg);
     }
 
-    async updateOverleg(id, updates) {
+    updateOverleg(id, updates) {
         const index = this.overleggen.findIndex(o => o.id === id);
         if (index !== -1) {
             this.overleggen[index] = { ...this.overleggen[index], ...updates };
-            await this.saveToDrive();
+            this.saveToDrive();
             this.render();
             this.scheduleNotification(this.overleggen[index]);
         }
     }
 
-    async deleteOverleg(id) {
+    deleteOverleg(id) {
         this.overleggen = this.overleggen.filter(o => o.id !== id);
-        await this.saveToDrive();
+        this.saveToDrive();
         this.render();
         this.cancelNotification(id);
     }
@@ -450,49 +418,52 @@ class OverlegApp {
     // Event Listeners
     setupEventListeners() {
         // Sync button
-        document.getElementById('syncBtn')?.addEventListener('click', async () => {
-            await this.loadFromDrive();
+        document.getElementById('syncBtn').addEventListener('click', () => {
+            this.manualSync();
         });
 
-        // Account button
-        document.getElementById('accountBtn')?.addEventListener('click', () => {
-            this.showAccountMenu();
+        // Profile button
+        document.getElementById('profileBtn').addEventListener('click', () => {
+            document.getElementById('profileModal').classList.add('show');
         });
 
-        // Sign out
-        document.getElementById('signOutBtn')?.addEventListener('click', () => {
-            this.signOut();
+        document.getElementById('closeProfileModal').addEventListener('click', () => {
+            document.getElementById('profileModal').classList.remove('show');
         });
 
-        // Close account menu when clicking outside
-        document.getElementById('accountMenu')?.addEventListener('click', (e) => {
-            if (e.target.id === 'accountMenu') {
-                this.hideAccountMenu();
-            }
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            this.logout();
         });
 
         // Add button
-        document.getElementById('addBtn')?.addEventListener('click', () => {
+        document.getElementById('addBtn').addEventListener('click', () => {
             this.openModal();
         });
 
         // Modal close
-        document.getElementById('closeModal')?.addEventListener('click', () => {
+        document.getElementById('closeModal').addEventListener('click', () => {
             this.closeModal();
         });
 
-        document.getElementById('cancelBtn')?.addEventListener('click', () => {
+        document.getElementById('cancelBtn').addEventListener('click', () => {
             this.closeModal();
         });
 
-        document.getElementById('modal')?.addEventListener('click', (e) => {
+        document.getElementById('modal').addEventListener('click', (e) => {
             if (e.target.id === 'modal') {
                 this.closeModal();
             }
         });
 
+        document.getElementById('profileModal').addEventListener('click', (e) => {
+            if (e.target.id === 'profileModal') {
+                document.getElementById('profileModal').classList.remove('show');
+            }
+        });
+
         // Datum checkbox
-        document.getElementById('heeftDatum')?.addEventListener('change', (e) => {
+        document.getElementById('heeftDatum').addEventListener('change', (e) => {
             const datumGroup = document.getElementById('datumGroup');
             datumGroup.style.display = e.target.checked ? 'block' : 'none';
             
@@ -505,66 +476,33 @@ class OverlegApp {
         });
 
         // Add agendapunt button
-        document.getElementById('addAgendapunt')?.addEventListener('click', () => {
+        document.getElementById('addAgendapunt').addEventListener('click', () => {
             this.addAgendapuntInput();
         });
 
         // Form submit
-        document.getElementById('overlegForm')?.addEventListener('submit', (e) => {
+        document.getElementById('overlegForm').addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleFormSubmit();
         });
 
-        // Detail view buttons
-        document.getElementById('backBtn')?.addEventListener('click', () => {
+        // Detail view back button
+        document.getElementById('backBtn').addEventListener('click', () => {
             this.closeDetailView();
         });
 
-        document.getElementById('editBtn')?.addEventListener('click', () => {
+        // Detail view edit button
+        document.getElementById('editBtn').addEventListener('click', () => {
             this.openModal(this.currentOverleg);
         });
 
-        document.getElementById('deleteBtn')?.addEventListener('click', () => {
+        // Detail view delete button
+        document.getElementById('deleteBtn').addEventListener('click', () => {
             if (confirm(`Weet je zeker dat je "${this.currentOverleg.naam}" wilt verwijderen?`)) {
                 this.deleteOverleg(this.currentOverleg.id);
                 this.closeDetailView();
             }
         });
-    }
-
-    showAccountMenu() {
-        const menu = document.getElementById('accountMenu');
-        menu.classList.add('show');
-        
-        // Fill in user info
-        document.getElementById('userName').textContent = localStorage.getItem('user_name') || 'Gebruiker';
-        document.getElementById('userEmail').textContent = localStorage.getItem('user_email') || '';
-        document.getElementById('userPhoto').src = localStorage.getItem('user_picture') || 'icon-192.png';
-    }
-
-    hideAccountMenu() {
-        document.getElementById('accountMenu').classList.remove('show');
-    }
-
-    signOut() {
-        if (confirm('Weet je zeker dat je wilt uitloggen?')) {
-            // Clear all stored data
-            localStorage.removeItem('google_access_token');
-            localStorage.removeItem('token_timestamp');
-            localStorage.removeItem('user_name');
-            localStorage.removeItem('user_email');
-            localStorage.removeItem('user_picture');
-            
-            // Reset state
-            this.isSignedIn = false;
-            this.accessToken = null;
-            this.driveFileId = null;
-            this.overleggen = [];
-            
-            // Show login screen
-            this.hideAccountMenu();
-            this.showLoginScreen();
-        }
     }
 
     // Modal Management
@@ -629,7 +567,7 @@ class OverlegApp {
         container.appendChild(div);
     }
 
-    async handleFormSubmit() {
+    handleFormSubmit() {
         const naam = document.getElementById('overlegNaam').value.trim();
         const heeftDatum = document.getElementById('heeftDatum').checked;
         const datumValue = document.getElementById('overlegDatum').value;
@@ -656,9 +594,9 @@ class OverlegApp {
         };
 
         if (this.editingOverleg) {
-            await this.updateOverleg(this.editingOverleg.id, overlegData);
+            this.updateOverleg(this.editingOverleg.id, overlegData);
         } else {
-            await this.addOverleg(overlegData);
+            this.addOverleg(overlegData);
         }
 
         this.closeModal();
@@ -722,11 +660,11 @@ class OverlegApp {
             const checkbox = item.querySelector('input[type="checkbox"]');
             const apId = item.dataset.id;
             
-            checkbox.addEventListener('change', async () => {
+            checkbox.addEventListener('change', () => {
                 const agendapunt = overleg.agendapunten.find(a => a.id === apId);
                 if (agendapunt) {
                     agendapunt.afgevinkt = checkbox.checked;
-                    await this.updateOverleg(overleg.id, { agendapunten: overleg.agendapunten });
+                    this.updateOverleg(overleg.id, { agendapunten: overleg.agendapunten });
                     item.classList.toggle('checked', checkbox.checked);
                 }
             });

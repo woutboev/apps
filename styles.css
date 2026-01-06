@@ -33,23 +33,118 @@ body {
     background-color: var(--light-gray);
 }
 
+/* Login Screen */
+.login-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+}
+
+.login-container {
+    background: white;
+    border-radius: 20px;
+    padding: 40px 30px;
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.login-icon {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 20px;
+    border-radius: 20px;
+}
+
+.login-container h1 {
+    font-size: 28px;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+
+.login-subtitle {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin-bottom: 30px;
+}
+
+#googleSignInButton {
+    margin: 30px 0;
+    display: flex;
+    justify-content: center;
+}
+
+.login-info {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.login-info p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 8px 0;
+    text-align: left;
+}
+
 /* Header */
 header {
     background-color: var(--background);
-    padding: 16px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
     z-index: 100;
 }
 
+.header-content {
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
 header h1 {
     font-size: 28px;
     font-weight: 700;
     letter-spacing: -0.5px;
+}
+
+.sync-status {
+    padding: 8px 20px;
+    font-size: 13px;
+    background-color: var(--light-gray);
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border-color);
+    display: none;
+}
+
+.sync-status.show {
+    display: block;
+}
+
+.sync-status.syncing {
+    background-color: #FFF8E1;
+    color: #F57C00;
+}
+
+.sync-status.success {
+    background-color: #E8F5E9;
+    color: #2E7D32;
+}
+
+.sync-status.error {
+    background-color: #FFEBEE;
+    color: #C62828;
 }
 
 .icon-btn {
@@ -67,6 +162,78 @@ header h1 {
 
 .icon-btn:active {
     opacity: 0.5;
+}
+
+.sync-btn.syncing {
+    animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.profile-image {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* Profile Modal */
+.profile-content {
+    padding: 20px;
+    text-align: center;
+}
+
+.profile-image-large {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin: 0 auto 16px;
+    display: block;
+}
+
+.profile-content h3 {
+    font-size: 20px;
+    margin-bottom: 4px;
+}
+
+.profile-content > p {
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+}
+
+.profile-info {
+    background-color: var(--light-gray);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 24px 0;
+    text-align: left;
+}
+
+.profile-info p {
+    margin: 8px 0;
+    font-size: 15px;
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+    padding: 12px 24px;
+    font-size: 17px;
+    font-weight: 600;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    transition: opacity 0.2s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.btn-danger:active {
+    opacity: 0.7;
 }
 
 /* Main Content */

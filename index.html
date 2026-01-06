@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Mijn Overleggen">
+    <meta name="theme-color" content="#007AFF">
+    <title>Mijn Overleggen</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #007AFF;
+            --danger-color: #FF3B30;
+            --warning-color: #FF9500;
+            --success-color: #34C759;
+            --gray-color: #8E8E93;
+            --light-gray: #F2F2F7;
+            --border-color: #C6C6C8;
+            --text-primary: #000000;
+            --text-secondary: #6D6D72;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--light-gray);
+            color: var(--text-primary);
+            -webkit-font-smoothing: antialiased;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .header {
+            background-color: white;
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .btn-add {
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            font-size: 32px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 10px 16px;
+            background: var(--light-gray);
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .overleg-item {
+            padding: 16px;
+            border-bottom: 1px solid var(--light-gray);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .overleg-item:last-child {
+            border-bottom: none;
+        }
+
+        .overleg-item:active {
+            background-color: var(--light-gray);
+        }
+
+        .overleg-item.passed {
+            opacity: 0.5;
+        }
+
+        .overleg-naam {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .overleg-datum {
+            font-size: 15px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .overleg-datum.not-planned {
+            color: var(--warning-color);
+        }
+
+        .overleg-count {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+            animation: fadeIn 0.3s;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: flex-end;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: white;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            border-radius: 10px 10px 0 0;
+            animation: slideUp 0.3s;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-title {
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        .btn-text {
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            font-size: 17px;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .btn-text:disabled {
+            color: var(--gray-color);
+        }
+
+        .btn-text.danger {
+            color: var(--danger-color);
+        }
+
+        .form-section {
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 17px;
+            background: white;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .toggle-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: var(--light-gray);
+            border-radius: 8px;
+        }
+
+        .toggle {
+            position: relative;
+            width: 51px;
+            height: 31px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--border-color);
+            transition: 0.3s;
+            border-radius: 31px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 27px;
+            width: 27px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .toggle input:checked + .toggle-slider {
+            background-color: var(--success-color);
+        }
+
+        .toggle input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .agendapunt-item {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .agendapunt-item input {
+            flex: 1;
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            color: var(--danger-color);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-add-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            font-size: 17px;
+            cursor: pointer;
+            padding: 12px;
+            width: 100%;
+            text-align: left;
+        }
+
+        /* Detail View */
+        .detail-section {
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--light-gray);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: var(--text-secondary);
+        }
+
+        .detail-value {
+            font-weight: 500;
+            text-align: right;
+        }
+
+        .detail-value.not-planned {
+            color: var(--warning-color);
+        }
+
+        .agendapunt-detail {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--light-gray);
+        }
+
+        .agendapunt-detail:last-child {
+            border-bottom: none;
+        }
+
+        .checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--gray-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .checkbox.checked {
+            background-color: var(--success-color);
+            border-color: var(--success-color);
+        }
+
+        .checkbox.checked::after {
+            content: "✓";
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .agendapunt-text {
+            flex: 1;
+            font-size: 17px;
+        }
+
+        .agendapunt-text.checked {
+            text-decoration: line-through;
+            color: var(--text-secondary);
+        }
+
+        .back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            font-size: 17px;
+            cursor: pointer;
+            padding: 0;
+            margin-bottom: 16px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            padding: 20px;
+        }
+
+        .btn-primary {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-secondary {
+            flex: 1;
+            padding: 14px;
+            border: 1px solid var(--danger-color);
+            border-radius: 8px;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
+            background-color: white;
+            color: var(--danger-color);
+        }
+
+        @media (display-mode: standalone) {
+            .header {
+                padding-top: max(16px, env(safe-area-inset-top));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+        // Data Management
+        class OverlegManager {
+            constructor() {
+                this.overleggen = this.loadFromStorage();
+                this.listeners = [];
+                this.checkNotifications();
+            }
+
+            loadFromStorage() {
+                const data = localStorage.getItem('overleggen');
+                return data ? JSON.parse(data) : [];
+            }
+
+            saveToStorage() {
+                localStorage.setItem('overleggen', JSON.stringify(this.overleggen));
+                this.notifyListeners();
+            }
+
+            subscribe(listener) {
+                this.listeners.push(listener);
+            }
+
+            notifyListeners() {
+                this.listeners.forEach(listener => listener());
+            }
+
+            addOverleg(overleg) {
+                overleg.id = Date.now().toString();
+                this.overleggen.push(overleg);
+                this.saveToStorage();
+                this.scheduleNotification(overleg);
+            }
+
+            updateOverleg(overleg) {
+                const index = this.overleggen.findIndex(o => o.id === overleg.id);
+                if (index !== -1) {
+                    this.overleggen[index] = overleg;
+                    this.saveToStorage();
+                    this.scheduleNotification(overleg);
+                }
+            }
+
+            deleteOverleg(id) {
+                this.overleggen = this.overleggen.filter(o => o.id !== id);
+                this.saveToStorage();
+            }
+
+            getOverleg(id) {
+                return this.overleggen.find(o => o.id === id);
+            }
+
+            isPassed(datum) {
+                if (!datum) return false;
+                return new Date(datum) < new Date();
+            }
+
+            async scheduleNotification(overleg) {
+                if (!overleg.datum || this.isPassed(overleg.datum)) return;
+
+                // Request notification permission
+                if ('Notification' in window && Notification.permission === 'default') {
+                    await Notification.requestPermission();
+                }
+
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    // Calculate notification time (day before at 9:00)
+                    const overlegDate = new Date(overleg.datum);
+                    const notificationDate = new Date(overlegDate);
+                    notificationDate.setDate(notificationDate.getDate() - 1);
+                    notificationDate.setHours(9, 0, 0, 0);
+
+                    const now = new Date();
+                    const timeUntilNotification = notificationDate - now;
+
+                    if (timeUntilNotification > 0) {
+                        const notificationKey = `notification_${overleg.id}`;
+                        
+                        // Clear existing timeout
+                        const existingTimeout = localStorage.getItem(notificationKey);
+                        if (existingTimeout) {
+                            clearTimeout(parseInt(existingTimeout));
+                        }
+
+                        // Schedule new notification
+                        const timeoutId = setTimeout(() => {
+                            const agendapunten = overleg.agendapunten
+                                .map(ap => `• ${ap.tekst}`)
+                                .join('\n');
+                            
+                            new Notification(`Overleg morgen: ${overleg.naam}`, {
+                                body: `Agendapunten:\n${agendapunten}`,
+                                icon: 'icon.png',
+                                tag: overleg.id
+                            });
+                            
+                            localStorage.removeItem(notificationKey);
+                        }, timeUntilNotification);
+
+                        localStorage.setItem(notificationKey, timeoutId.toString());
+                    }
+                }
+            }
+
+            checkNotifications() {
+                // Reschedule notifications on app load
+                this.overleggen.forEach(overleg => {
+                    if (overleg.datum && !this.isPassed(overleg.datum)) {
+                        this.scheduleNotification(overleg);
+                    }
+                });
+            }
+
+            getGeplandeOverleggen() {
+                return this.overleggen
+                    .filter(o => o.datum)
+                    .sort((a, b) => new Date(a.datum) - new Date(b.datum));
+            }
+
+            getOngeplandeOverleggen() {
+                return this.overleggen
+                    .filter(o => !o.datum)
+                    .sort((a, b) => a.naam.localeCompare(b.naam));
+            }
+        }
+
+        // Router
+        class Router {
+            constructor() {
+                this.routes = {};
+                this.currentRoute = 'home';
+                this.params = {};
+            }
+
+            register(name, component) {
+                this.routes[name] = component;
+            }
+
+            navigate(route, params = {}) {
+                this.currentRoute = route;
+                this.params = params;
+                this.render();
+            }
+
+            render() {
+                const component = this.routes[this.currentRoute];
+                if (component) {
+                    component(this.params);
+                }
+            }
+        }
+
+        // Initialize
+        const manager = new OverlegManager();
+        const router = new Router();
+        const app = document.getElementById('app');
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const options = { 
+                weekday: 'short', 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            };
+            return date.toLocaleDateString('nl-NL', options);
+        }
+
+        // Home View
+        function renderHome() {
+            const geplande = manager.getGeplandeOverleggen();
+            const ongepland = manager.getOngeplandeOverleggen();
+
+            app.innerHTML = `
+                <div class="header">
+                    <h1>Mijn Overleggen</h1>
+                    <button class="btn-add" onclick="router.navigate('add')">+</button>
+                </div>
+                <div class="container">
+                    ${geplande.length > 0 ? `
+                        <div class="section">
+                            <div class="section-header">Geplande overleggen</div>
+                            ${geplande.map(o => `
+                                <div class="overleg-item ${manager.isPassed(o.datum) ? 'passed' : ''}" 
+                                     onclick="router.navigate('detail', {id: '${o.id}'})">
+                                    <div class="overleg-naam">${o.naam}</div>
+                                    <div class="overleg-datum">${formatDate(o.datum)}</div>
+                                    <div class="overleg-count">${o.agendapunten.length} agendapunt(en)</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    
+                    ${ongepland.length > 0 ? `
+                        <div class="section">
+                            <div class="section-header">Nog in te plannen</div>
+                            ${ongepland.map(o => `
+                                <div class="overleg-item" onclick="router.navigate('detail', {id: '${o.id}'})">
+                                    <div class="overleg-naam">${o.naam}</div>
+                                    <div class="overleg-datum not-planned">Nog in te plannen</div>
+                                    <div class="overleg-count">${o.agendapunten.length} agendapunt(en)</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    
+                    ${geplande.length === 0 && ongepland.length === 0 ? `
+                        <div class="empty-state">Geen overleggen</div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        // Add/Edit Modal
+        function renderAddEdit(params = {}) {
+            const isEdit = !!params.overleg;
+            const overleg = params.overleg || {
+                naam: '',
+                datum: null,
+                agendapunten: [{ tekst: '' }]
+            };
+
+            const heeftDatum = !!overleg.datum;
+
+            app.innerHTML = `
+                <div class="modal active">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <button class="btn-text" onclick="router.navigate('home')">Annuleren</button>
+                            <div class="modal-title">${isEdit ? 'Bewerk Overleg' : 'Nieuw Overleg'}</div>
+                            <button class="btn-text" id="btn-save">Opslaan</button>
+                        </div>
+                        <div class="form-section">
+                            <div class="form-group">
+                                <label class="form-label">Overleg details</label>
+                                <input type="text" class="form-input" id="input-naam" 
+                                       placeholder="Naam overleg" value="${overleg.naam}">
+                            </div>
+                            
+                            <div class="form-group">
+                                <div class="toggle-group">
+                                    <span>Datum gepland</span>
+                                    <label class="toggle">
+                                        <input type="checkbox" id="toggle-datum" ${heeftDatum ? 'checked' : ''}>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group" id="datum-group" style="display: ${heeftDatum ? 'block' : 'none'}">
+                                <input type="datetime-local" class="form-input" id="input-datum" 
+                                       value="${overleg.datum ? new Date(overleg.datum).toISOString().slice(0, 16) : ''}">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Agendapunten</label>
+                                <div id="agendapunten-list">
+                                    ${overleg.agendapunten.map((ap, i) => `
+                                        <div class="agendapunt-item" data-index="${i}">
+                                            <input type="text" class="form-input agendapunt-input" 
+                                                   placeholder="Agendapunt" value="${ap.tekst}">
+                                            ${overleg.agendapunten.length > 1 ? `
+                                                <button class="btn-icon" onclick="removeAgendapunt(${i})">−</button>
+                                            ` : ''}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <button class="btn-add-item" onclick="addAgendapunt()">
+                                    <span style="font-size: 20px;">+</span>
+                                    Voeg agendapunt toe
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Event listeners
+            document.getElementById('toggle-datum').addEventListener('change', (e) => {
+                document.getElementById('datum-group').style.display = e.target.checked ? 'block' : 'none';
+            });
+
+            document.getElementById('btn-save').addEventListener('click', () => {
+                const naam = document.getElementById('input-naam').value.trim();
+                const heeftDatum = document.getElementById('toggle-datum').checked;
+                const datum = heeftDatum ? document.getElementById('input-datum').value : null;
+                
+                const agendapuntInputs = document.querySelectorAll('.agendapunt-input');
+                const agendapunten = Array.from(agendapuntInputs)
+                    .map(input => ({ tekst: input.value.trim(), afgevinkt: false }))
+                    .filter(ap => ap.tekst);
+
+                if (!naam || agendapunten.length === 0) {
+                    alert('Vul minimaal een naam en één agendapunt in');
+                    return;
+                }
+
+                const newOverleg = {
+                    ...overleg,
+                    naam,
+                    datum: datum ? new Date(datum).toISOString() : null,
+                    agendapunten
+                };
+
+                if (isEdit) {
+                    manager.updateOverleg(newOverleg);
+                } else {
+                    manager.addOverleg(newOverleg);
+                }
+
+                router.navigate('home');
+            });
+        }
+
+        // Detail View
+        function renderDetail(params) {
+            const overleg = manager.getOverleg(params.id);
+            if (!overleg) {
+                router.navigate('home');
+                return;
+            }
+
+            const isPassed = manager.isPassed(overleg.datum);
+
+            app.innerHTML = `
+                <div class="header">
+                    <button class="back-button" onclick="router.navigate('home')">
+                        ← Terug
+                    </button>
+                    <button class="btn-text" onclick="router.navigate('edit', {overleg: ${JSON.stringify(overleg).replace(/"/g, '&quot;')}})">
+                        Bewerk
+                    </button>
+                </div>
+                <div class="container">
+                    <div class="detail-section">
+                        <div class="section-header">Details</div>
+                        <div class="detail-row">
+                            <span class="detail-label">Naam</span>
+                            <span class="detail-value">${overleg.naam}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">${overleg.datum ? 'Datum' : 'Status'}</span>
+                            <span class="detail-value ${!overleg.datum ? 'not-planned' : ''}">
+                                ${overleg.datum ? formatDate(overleg.datum) : 'Nog in te plannen'}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <div class="section-header">Agendapunten</div>
+                        ${overleg.agendapunten.map((ap, i) => `
+                            <div class="agendapunt-detail" onclick="toggleAgendapunt('${overleg.id}', ${i})">
+                                <div class="checkbox ${ap.afgevinkt ? 'checked' : ''}"></div>
+                                <div class="agendapunt-text ${ap.afgevinkt ? 'checked' : ''}">${ap.tekst}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button class="btn-secondary" onclick="deleteOverleg('${overleg.id}')">
+                            Verwijder overleg
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Global functions
+        window.addAgendapunt = function() {
+            const list = document.getElementById('agendapunten-list');
+            const index = list.children.length;
+            const item = document.createElement('div');
+            item.className = 'agendapunt-item';
+            item.dataset.index = index;
+            item.innerHTML = `
+                <input type="text" class="form-input agendapunt-input" placeholder="Agendapunt">
+                <button class="btn-icon" onclick="removeAgendapunt(${index})">−</button>
+            `;
+            list.appendChild(item);
+        };
+
+        window.removeAgendapunt = function(index) {
+            const list = document.getElementById('agendapunten-list');
+            if (list.children.length > 1) {
+                list.children[index].remove();
+            }
+        };
+
+        window.toggleAgendapunt = function(overlegId, index) {
+            const overleg = manager.getOverleg(overlegId);
+            overleg.agendapunten[index].afgevinkt = !overleg.agendapunten[index].afgevinkt;
+            manager.updateOverleg(overleg);
+            router.navigate('detail', { id: overlegId });
+        };
+
+        window.deleteOverleg = function(id) {
+            if (confirm('Weet je zeker dat je dit overleg wilt verwijderen?')) {
+                manager.deleteOverleg(id);
+                router.navigate('home');
+            }
+        };
+
+        // Register routes
+        router.register('home', renderHome);
+        router.register('add', renderAddEdit);
+        router.register('edit', renderAddEdit);
+        router.register('detail', renderDetail);
+
+        // Subscribe to changes
+        manager.subscribe(() => router.render());
+
+        // Initial render
+        router.render();
+
+        // Request notification permission on first load
+        if ('Notification' in window && Notification.permission === 'default') {
+            setTimeout(() => {
+                Notification.requestPermission();
+            }, 2000);
+        }
+
+        // Service Worker registration
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(err => {
+                console.log('Service Worker registration failed:', err);
+            });
+        }
+    </script>
+</body>
+</html>
